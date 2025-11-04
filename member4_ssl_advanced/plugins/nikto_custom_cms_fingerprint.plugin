@@ -1,0 +1,492 @@
+# Custom CMS and Framework Fingerprinting Plugin for Nikto
+
+
+sub nikto_custom_cms_fingerprint_init {
+    my $id = {
+        name        => "custom_cms_fingerprint",
+        full_name   => "CMS and Framework Fingerprinting",
+        author      => "Student Team",
+        description => "Detects popular CMS platforms and web frameworks including WordPress, Joomla, Drupal, Laravel, Django, and more",
+        copyright   => "2025 College Project",
+        hooks       => {
+                        scan => { method => \&nikto_custom_cms_fingerprint, },
+                       },
+    };
+    return $id;
+}
+
+sub nikto_custom_cms_fingerprint {
+    my ($mark) = @_;
+    
+    # Get the main page first
+    my ($res_main, $content_main, $error_main, $request_main, $result_main) = 
+        nfetch($mark, "/", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    # ===== WORDPRESS DETECTION =====
+    check_wordpress($mark, $content_main);
+    
+    # ===== JOOMLA DETECTION =====
+    check_joomla($mark, $content_main);
+    
+    # ===== DRUPAL DETECTION =====
+    check_drupal($mark, $content_main);
+    
+    # ===== MAGENTO DETECTION =====
+    check_magento($mark, $content_main);
+    
+    # ===== LARAVEL DETECTION =====
+    check_laravel($mark, $content_main);
+    
+    # ===== DJANGO DETECTION =====
+    check_django($mark, $content_main);
+    
+    # ===== RUBY ON RAILS DETECTION =====
+    check_rails($mark, $content_main);
+    
+    # ===== ASP.NET DETECTION =====
+    check_aspnet($mark, $content_main, $result_main);
+    
+    # ===== PHP FRAMEWORKS =====
+    check_php_frameworks($mark, $content_main);
+    
+    # ===== JAVASCRIPT FRAMEWORKS =====
+    check_js_frameworks($mark, $content_main);
+    
+    return;
+}
+
+sub check_wordpress {
+    my ($mark, $content) = @_;
+    
+    # Check for wp-login.php
+    my ($res, $content_wp, $error, $request, $result) = 
+        nfetch($mark, "/wp-login.php", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200") {
+        add_vulnerability(
+            $mark,
+            "WordPress detected: /wp-login.php found - WordPress CMS is installed",
+            999300,
+            0,
+            "GET",
+            "/wp-login.php",
+            $request,
+            $result
+        );
+        
+        # Try to detect version
+        if ($content_wp =~ /ver=([0-9.]+)/i) {
+            my $version = $1;
+            add_vulnerability(
+                $mark,
+                "WordPress version detected: $version - Check for known vulnerabilities",
+                999301,
+                0,
+                "GET",
+                "/wp-login.php",
+                $request,
+                $result
+            );
+        }
+    }
+    
+    # Check wp-admin
+    ($res, $content_wp, $error, $request, $result) = 
+        nfetch($mark, "/wp-admin/", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && ($res eq "302" || $res eq "301" || $res eq "200")) {
+        add_vulnerability(
+            $mark,
+            "WordPress admin panel detected: /wp-admin/ - Protect with strong passwords and 2FA",
+            999302,
+            0,
+            "GET",
+            "/wp-admin/",
+            $request,
+            $result
+        );
+    }
+    
+    # Check wp-content
+    ($res, $content_wp, $error, $request, $result) = 
+        nfetch($mark, "/wp-content/", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && ($res eq "200" || $res eq "403")) {
+        add_vulnerability(
+            $mark,
+            "WordPress content directory found: /wp-content/ - May reveal plugins and themes",
+            999303,
+            0,
+            "GET",
+            "/wp-content/",
+            $request,
+            $result
+        );
+    }
+    
+    # Check for wp-config.php backup
+    ($res, $content_wp, $error, $request, $result) = 
+        nfetch($mark, "/wp-config.php.bak", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200") {
+        add_vulnerability(
+            $mark,
+            "CRITICAL: WordPress configuration backup found: /wp-config.php.bak - Contains database credentials!",
+            999304,
+            0,
+            "GET",
+            "/wp-config.php.bak",
+            $request,
+            $result
+        );
+    }
+}
+
+sub check_joomla {
+    my ($mark, $content) = @_;
+    
+    # Check for /administrator
+    my ($res, $content_j, $error, $request, $result) = 
+        nfetch($mark, "/administrator/", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200" && $content_j && $content_j =~ /joomla/i) {
+        add_vulnerability(
+            $mark,
+            "Joomla CMS detected: /administrator/ - Joomla admin panel found",
+            999305,
+            0,
+            "GET",
+            "/administrator/",
+            $request,
+            $result
+        );
+        
+        # Try to detect version
+        if ($content_j =~ /Joomla!?\s+([0-9.]+)/i) {
+            my $version = $1;
+            add_vulnerability(
+                $mark,
+                "Joomla version detected: $version",
+                999306,
+                0,
+                "GET",
+                "/administrator/",
+                $request,
+                $result
+            );
+        }
+    }
+    
+    # Check for configuration.php backup
+    ($res, $content_j, $error, $request, $result) = 
+        nfetch($mark, "/configuration.php.bak", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200") {
+        add_vulnerability(
+            $mark,
+            "CRITICAL: Joomla configuration backup found: /configuration.php.bak",
+            999307,
+            0,
+            "GET",
+            "/configuration.php.bak",
+            $request,
+            $result
+        );
+    }
+}
+
+sub check_drupal {
+    my ($mark, $content) = @_;
+    
+    # Check main page for Drupal indicators
+    if ($content && ($content =~ /drupal/i || $content =~ /sites\/default/i || $content =~ /sites\/all/i)) {
+        add_vulnerability(
+            $mark,
+            "Drupal CMS detected: Drupal indicators found in page content",
+            999308,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+    
+    # Check for /user/login
+    my ($res, $content_d, $error, $request, $result) = 
+        nfetch($mark, "/user/login", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200" && $content_d && $content_d =~ /drupal/i) {
+        add_vulnerability(
+            $mark,
+            "Drupal login page found: /user/login",
+            999309,
+            0,
+            "GET",
+            "/user/login",
+            $request,
+            $result
+        );
+    }
+    
+    # Check CHANGELOG.txt
+    ($res, $content_d, $error, $request, $result) = 
+        nfetch($mark, "/CHANGELOG.txt", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200" && $content_d && $content_d =~ /Drupal ([0-9.]+)/i) {
+        my $version = $1;
+        add_vulnerability(
+            $mark,
+            "Drupal version detected: $version - Found in CHANGELOG.txt",
+            999310,
+            0,
+            "GET",
+            "/CHANGELOG.txt",
+            $request,
+            $result
+        );
+    }
+}
+
+sub check_magento {
+    my ($mark, $content) = @_;
+    
+    # Check for Magento indicators
+    if ($content && $content =~ /mage/i) {
+        my ($res, $content_m, $error, $request, $result) = 
+            nfetch($mark, "/admin", "GET", "", "", "", "custom_cms_fingerprint");
+        
+        if ($res && $res eq "200" && $content_m && $content_m =~ /magento/i) {
+            add_vulnerability(
+                $mark,
+                "Magento e-commerce platform detected: /admin endpoint found",
+                999311,
+                0,
+                "GET",
+                "/admin",
+                $request,
+                $result
+            );
+        }
+    }
+}
+
+sub check_laravel {
+    my ($mark, $content) = @_;
+    
+    # Check main page for Laravel indicators
+    if ($content && $content =~ /laravel/i) {
+        add_vulnerability(
+            $mark,
+            "Laravel framework detected: Laravel indicators in page content",
+            999312,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+    
+    # Check for Laravel debug page
+    my ($res, $content_l, $error, $request, $result) = 
+        nfetch($mark, "/_ignition/health-check", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200") {
+        add_vulnerability(
+            $mark,
+            "Laravel Ignition debug tool detected: /_ignition/health-check - May expose sensitive information",
+            999313,
+            0,
+            "GET",
+            "/_ignition/health-check",
+            $request,
+            $result
+        );
+    }
+}
+
+sub check_django {
+    my ($mark, $content) = @_;
+    
+    # Check for Django indicators
+    if ($content && ($content =~ /django/i || $content =~ /csrfmiddlewaretoken/i)) {
+        add_vulnerability(
+            $mark,
+            "Django framework detected: Django indicators found (CSRF token pattern or Django references)",
+            999314,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+    
+    # Check for Django admin
+    my ($res, $content_d, $error, $request, $result) = 
+        nfetch($mark, "/admin/", "GET", "", "", "", "custom_cms_fingerprint");
+    
+    if ($res && $res eq "200" && $content_d && $content_d =~ /django/i) {
+        add_vulnerability(
+            $mark,
+            "Django admin panel detected: /admin/ - Default Django administration interface",
+            999315,
+            0,
+            "GET",
+            "/admin/",
+            $request,
+            $result
+        );
+    }
+}
+
+sub check_rails {
+    my ($mark, $content) = @_;
+    
+    # Check for Rails indicators
+    if ($content && $content =~ /rails/i) {
+        add_vulnerability(
+            $mark,
+            "Ruby on Rails framework detected: Rails indicators in page content",
+            999316,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+}
+
+sub check_aspnet {
+    my ($mark, $content, $result) = @_;
+    
+    # Check for ASP.NET headers
+    if ($result && $result->{'x_aspnet_version'}) {
+        my $version = $result->{'x_aspnet_version'};
+        add_vulnerability(
+            $mark,
+            "ASP.NET detected: X-AspNet-Version header reveals version: $version",
+            999317,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+    
+    # Check for ViewState (ASP.NET indicator)
+    if ($content && $content =~ /__VIEWSTATE/i) {
+        add_vulnerability(
+            $mark,
+            "ASP.NET WebForms detected: __VIEWSTATE found in page",
+            999318,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+}
+
+sub check_php_frameworks {
+    my ($mark, $content) = @_;
+    
+    # CodeIgniter
+    if ($content && $content =~ /codeigniter/i) {
+        add_vulnerability(
+            $mark,
+            "CodeIgniter framework detected",
+            999319,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+    
+    # Symfony
+    if ($content && $content =~ /symfony/i) {
+        add_vulnerability(
+            $mark,
+            "Symfony framework detected",
+            999320,
+            0,
+            "GET",
+            "/",
+            "",
+            ""
+        );
+    }
+}
+
+sub check_js_frameworks {
+    my ($mark, $content) = @_;
+    
+    if ($content) {
+        # React
+        if ($content =~ /react/i || $content =~ /__REACT/i) {
+            add_vulnerability(
+                $mark,
+                "React JavaScript framework detected",
+                999321,
+                0,
+                "GET",
+                "/",
+                "",
+                ""
+            );
+        }
+        
+        # Vue.js
+        if ($content =~ /vue\.js/i || $content =~ /v-app/i) {
+            add_vulnerability(
+                $mark,
+                "Vue.js JavaScript framework detected",
+                999322,
+                0,
+                "GET",
+                "/",
+                "",
+                ""
+            );
+        }
+        
+        # Angular
+        if ($content =~ /angular/i || $content =~ /ng-app/i) {
+            add_vulnerability(
+                $mark,
+                "Angular JavaScript framework detected",
+                999323,
+                0,
+                "GET",
+                "/",
+                "",
+                ""
+            );
+        }
+    }
+}
+
+1;
+
+###############################################################################
+# USAGE:
+# nikto -h http://target.com -Plugins "custom_cms_fingerprint"
+#
+# This plugin detects:
+# - WordPress (login, admin, content directory, config backups)
+# - Joomla (administrator panel, config backups)
+# - Drupal (user login, CHANGELOG.txt)
+# - Magento (admin panel)
+# - Laravel (Ignition debug tool)
+# - Django (admin panel, CSRF tokens)
+# - Ruby on Rails
+# - ASP.NET (headers, ViewState)
+# - PHP Frameworks (CodeIgniter, Symfony)
+# - JavaScript Frameworks (React, Vue.js, Angular)
+###############################################################################

@@ -1,0 +1,167 @@
+
+# Custom Security Headers Checker Plugin for Nikto
+
+
+sub nikto_custom_security_headers_init {
+    my $id = { 
+        name        => "custom_security_headers",
+        full_name   => "Custom Security Headers Checker",
+        author      => "Student Team",
+        description => "Checks for presence of modern security headers including CSP, HSTS, X-Frame-Options, etc.",
+        copyright   => "2025 College Project",
+        hooks       => {
+                        scan => { method => \&nikto_custom_security_headers, },
+                       },
+    };
+    return $id;
+}
+
+sub nikto_custom_security_headers {
+    my ($mark) = @_;
+    
+    # List of critical security headers to check
+    my @headers_to_check = (
+        {
+            name => 'X-Frame-Options',
+            description => 'Clickjacking protection header',
+            osvdb => '999100',
+            severity => 'Medium'
+        },
+        {
+            name => 'X-Content-Type-Options',
+            description => 'MIME-sniffing protection',
+            osvdb => '999101',
+            severity => 'Medium'
+        },
+        {
+            name => 'Strict-Transport-Security',
+            description => 'HSTS - Forces HTTPS connections',
+            osvdb => '999102',
+            severity => 'High'
+        },
+        {
+            name => 'Content-Security-Policy',
+            description => 'CSP - Controls resource loading',
+            osvdb => '999103',
+            severity => 'High'
+        },
+        {
+            name => 'X-XSS-Protection',
+            description => 'XSS filter in browsers',
+            osvdb => '999104',
+            severity => 'Medium'
+        },
+        {
+            name => 'Referrer-Policy',
+            description => 'Controls referrer information',
+            osvdb => '999105',
+            severity => 'Low'
+        },
+        {
+            name => 'Permissions-Policy',
+            description => 'Controls browser features',
+            osvdb => '999106',
+            severity => 'Low'
+        },
+        {
+            name => 'X-Permitted-Cross-Domain-Policies',
+            description => 'Controls cross-domain policies',
+            osvdb => '999107',
+            severity => 'Low'
+        }
+    );
+    
+    # Make a request to the root path
+    my ($res, $content, $error, $request, $result) = nfetch($mark, "/", "GET", "", "", "", "custom_security_headers");
+    
+    if (!$res) {
+        return;
+    }
+    
+    # Check each header
+    foreach my $header_info (@headers_to_check) {
+        my $header_name = $header_info->{name};
+        my $header_lower = lc($header_name);
+        $header_lower =~ s/-/_/g;
+        
+        # Check if header exists in response
+        my $header_present = 0;
+        if (defined $result->{$header_lower} && $result->{$header_lower} ne "") {
+            $header_present = 1;
+        }
+        
+        if (!$header_present) {
+            my $msg = "Missing security header: $header_name - " . $header_info->{description};
+            
+            add_vulnerability(
+                $mark,
+                $msg,
+                $header_info->{osvdb},
+                0,  # NIKTO ID
+                "GET",
+                "/",
+                $request,
+                $result
+            );
+        }
+    }
+    
+    # Check for Server header disclosure
+    if (defined $result->{'server'} && $result->{'server'} ne "") {
+        my $server_value = $result->{'server'};
+        
+        # Check if server header reveals version information
+        if ($server_value =~ /\d+\.\d+/) {
+            my $msg = "Server header discloses version information: $server_value - This may help attackers";
+            
+            add_vulnerability(
+                $mark,
+                $msg,
+                999108,
+                0,
+                "GET",
+                "/",
+                $request,
+                $result
+            );
+        }
+    }
+    
+    # Check X-Powered-By header
+    if (defined $result->{'x_powered_by'} && $result->{'x_powered_by'} ne "") {
+        my $powered_by = $result->{'x_powered_by'};
+        my $msg = "X-Powered-By header present: $powered_by - Reveals technology stack";
+        
+        add_vulnerability(
+            $mark,
+            $msg,
+            999109,
+            0,
+            "GET",
+            "/",
+            $request,
+            $result
+        );
+    }
+    
+    return;
+}
+
+1;
+
+###############################################################################
+# USAGE:
+# nikto -h http://target.com -Plugins "custom_security_headers"
+#
+# This plugin will check for:
+# - X-Frame-Options
+# - X-Content-Type-Options
+# - Strict-Transport-Security (HSTS)
+# - Content-Security-Policy (CSP)
+# - X-XSS-Protection
+# - Referrer-Policy
+# - Permissions-Policy
+# - X-Permitted-Cross-Domain-Policies
+# - Server version disclosure
+# - X-Powered-By disclosure
+###############################################################################

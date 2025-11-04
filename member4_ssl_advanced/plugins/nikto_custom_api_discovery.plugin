@@ -1,0 +1,270 @@
+
+# Custom API Endpoint Discovery Plugin for Nikto
+
+sub nikto_custom_api_discovery_init {
+    my $id = {
+        name        => "custom_api_discovery",
+        full_name   => "API Endpoint Discovery",
+        author      => "Student Team",
+        description => "Discovers common API endpoints, documentation, and specifications",
+        copyright   => "2025 College Project",
+        hooks       => {
+                        scan => { method => \&nikto_custom_api_discovery, },
+                       },
+    };
+    return $id;
+}
+
+sub nikto_custom_api_discovery {
+    my ($mark) = @_;
+    
+    # Common API paths and specifications
+    my @api_paths = (
+        {
+            path => "/api",
+            description => "Common API base path",
+            osvdb => "999200"
+        },
+        {
+            path => "/api/v1",
+            description => "API version 1 endpoint",
+            osvdb => "999201"
+        },
+        {
+            path => "/api/v2",
+            description => "API version 2 endpoint",
+            osvdb => "999202"
+        },
+        {
+            path => "/api/v3",
+            description => "API version 3 endpoint",
+            osvdb => "999203"
+        },
+        {
+            path => "/rest",
+            description => "REST API endpoint",
+            osvdb => "999204"
+        },
+        {
+            path => "/rest/api",
+            description => "REST API endpoint",
+            osvdb => "999205"
+        },
+        {
+            path => "/graphql",
+            description => "GraphQL API endpoint",
+            osvdb => "999206"
+        },
+        {
+            path => "/swagger",
+            description => "Swagger API documentation",
+            osvdb => "999207"
+        },
+        {
+            path => "/swagger.json",
+            description => "Swagger specification file",
+            osvdb => "999208"
+        },
+        {
+            path => "/swagger.yaml",
+            description => "Swagger YAML specification",
+            osvdb => "999209"
+        },
+        {
+            path => "/api-docs",
+            description => "API documentation",
+            osvdb => "999210"
+        },
+        {
+            path => "/api/docs",
+            description => "API documentation",
+            osvdb => "999211"
+        },
+        {
+            path => "/openapi.json",
+            description => "OpenAPI specification file",
+            osvdb => "999212"
+        },
+        {
+            path => "/openapi.yaml",
+            description => "OpenAPI YAML specification",
+            osvdb => "999213"
+        },
+        {
+            path => "/api/swagger",
+            description => "Swagger documentation endpoint",
+            osvdb => "999214"
+        },
+        {
+            path => "/docs",
+            description => "Documentation endpoint",
+            osvdb => "999215"
+        },
+        {
+            path => "/api/documentation",
+            description => "API documentation",
+            osvdb => "999216"
+        },
+        {
+            path => "/redoc",
+            description => "ReDoc API documentation",
+            osvdb => "999217"
+        },
+        {
+            path => "/swagger-ui",
+            description => "Swagger UI interface",
+            osvdb => "999218"
+        },
+        {
+            path => "/swagger-ui.html",
+            description => "Swagger UI HTML page",
+            osvdb => "999219"
+        },
+        {
+            path => "/api/graphql",
+            description => "GraphQL API endpoint",
+            osvdb => "999220"
+        },
+        {
+            path => "/graphiql",
+            description => "GraphiQL IDE interface",
+            osvdb => "999221"
+        },
+        {
+            path => "/playground",
+            description => "GraphQL Playground",
+            osvdb => "999222"
+        },
+        {
+            path => "/api/health",
+            description => "API health check endpoint",
+            osvdb => "999223"
+        },
+        {
+            path => "/api/status",
+            description => "API status endpoint",
+            osvdb => "999224"
+        },
+        {
+            path => "/api/version",
+            description => "API version endpoint",
+            osvdb => "999225"
+        },
+        {
+            path => "/api/info",
+            description => "API information endpoint",
+            osvdb => "999226"
+        },
+        {
+            path => "/v1",
+            description => "Version 1 API",
+            osvdb => "999227"
+        },
+        {
+            path => "/v2",
+            description => "Version 2 API",
+            osvdb => "999228"
+        },
+        {
+            path => "/apidocs",
+            description => "API documentation",
+            osvdb => "999229"
+        }
+    );
+    
+    # Test each API path
+    foreach my $api_info (@api_paths) {
+        my $path = $api_info->{path};
+        
+        my ($res, $content, $error, $request, $result) = nfetch($mark, $path, "GET", "", "", "", "custom_api_discovery");
+        
+        # Check if endpoint exists (200, 301, 302, 401, 403)
+        if ($res && ($res eq "200" || $res eq "301" || $res eq "302" || $res eq "401" || $res eq "403")) {
+            my $msg = "API endpoint or documentation found: $path (HTTP $res) - " . $api_info->{description};
+            
+            # Add extra details based on response
+            if ($res eq "401") {
+                $msg .= " - Requires authentication";
+            } elsif ($res eq "403") {
+                $msg .= " - Forbidden (but exists)";
+            } elsif ($res eq "301" || $res eq "302") {
+                $msg .= " - Redirects (check location)";
+            }
+            
+            # Check content for API indicators
+            if ($content) {
+                if ($content =~ /swagger/i) {
+                    $msg .= " - Contains Swagger references";
+                }
+                if ($content =~ /openapi/i) {
+                    $msg .= " - Contains OpenAPI references";
+                }
+                if ($content =~ /graphql/i) {
+                    $msg .= " - Contains GraphQL references";
+                }
+                if ($content =~ /"version":/i) {
+                    $msg .= " - Contains version information";
+                }
+            }
+            
+            add_vulnerability(
+                $mark,
+                $msg,
+                $api_info->{osvdb},
+                0,
+                "GET",
+                $path,
+                $request,
+                $result
+            );
+        }
+    }
+    
+    # Check for common API file extensions
+    my @api_files = (
+        "/swagger.json",
+        "/openapi.json",
+        "/api-spec.json",
+        "/api.json",
+        "/schema.json"
+    );
+    
+    foreach my $file (@api_files) {
+        my ($res, $content, $error, $request, $result) = nfetch($mark, $file, "GET", "", "", "", "custom_api_discovery");
+        
+        if ($res && $res eq "200" && $content) {
+            # Try to parse as JSON (simple check)
+            if ($content =~ /^\s*[\{\[]/ && $content =~ /[\}\]]\s*$/) {
+                my $msg = "API specification file found: $file - May contain sensitive endpoint information";
+                
+                add_vulnerability(
+                    $mark,
+                    $msg,
+                    999230,
+                    0,
+                    "GET",
+                    $file,
+                    $request,
+                    $result
+                );
+            }
+        }
+    }
+    
+    return;
+}
+
+1;
+
+###############################################################################
+# USAGE:
+# nikto -h http://target.com -Plugins "custom_api_discovery"
+#
+# This plugin will discover:
+# - REST API endpoints (/api, /rest, etc.)
+# - GraphQL endpoints (/graphql, /graphiql, /playground)
+# - API documentation (Swagger, OpenAPI, ReDoc)
+# - API specification files (.json, .yaml)
+# - API health/status/version endpoints
+# - Versioned API paths (/v1, /v2, /api/v1, etc.)
+###############################################################################
